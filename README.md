@@ -128,7 +128,7 @@ elif isinstance(module, QMatMul):
 
 또한 non-linear operator들은 fp16으로 했는데 이는 exponential 특징 때문으로 보입니다. 작은 변화에도 크게 값이 변할 경우에는 linear quantization으로는 크게 오류가 생깁니다. 예를 들어 0, 0.1의 non-linear 함수의 출력이 0, 100이라고 하면 quantization을 해버리면 0, 0이 출력됩니다. 심각한 quantization error가 발생합니다.
 
-따라서 mobilequant 에서는 non-linear operator는 quantization을 안 했습니다. 또한 논문에는 없었지만 코드를 보면 attention도 하지 않았습니다.
+mobilequant 에서는 non-linear operator는 quantization을 안 했습니다. 또한 논문에는 없었지만 코드를 보면 attention도 하지 않았습니다.
 
 
 
