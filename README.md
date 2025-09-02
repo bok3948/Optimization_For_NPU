@@ -26,6 +26,7 @@ Markdown
 > [Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference](https://arxiv.org/abs/1712.05877)
 
 <details>
+    
 <summary><b>QNN Quantization Dense Layer Kernel Code (접기/펼치기)</b></summary>
 
 ```python
@@ -87,6 +88,7 @@ def qdense_compute(
         )
 
     return out
+
 이 코드를 보면 현재 최신 버전 QNN은 scale 자체는 float 연산을 하는 것으로 보입니다.
 </details>
 
