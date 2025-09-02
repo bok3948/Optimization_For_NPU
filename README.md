@@ -109,7 +109,10 @@ LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특
 
 > *실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
 
-<img width="1361" height="391" alt="image" src="https://www.google.com/search?q=https://github.com/user-attachments/assets/85d6ad3c-0b33-471c-a729-2b8456331005" />
+<img width="1348" height="377" alt="image" src="https://github.com/user-attachments/assets/98109af5-7c20-4bc3-84f7-c383dc9e92ac" />
+
+> * 제가 실제로 MobileQuant 저자에게서 받은 내용입니다. 옛날 NPU라면 CPU와 GPU을 활용하라고 조언해주셨고, error가 심한 layer는 fp16을 활용하는 방식을 활용했다고 합니다. 
+
 
 
 
