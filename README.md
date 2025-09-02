@@ -109,7 +109,7 @@ def qdense_compute(
 
 실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
 
-Python
+
 
 mobilequant 코드에서는 FP16 사용
 ```python
