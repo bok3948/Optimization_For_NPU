@@ -101,13 +101,14 @@ def qdense_compute(
 ### LLM에서도 AIMET 방식의 quantization 적용의 어려움과 해결방법들
 하지만 이 방식을 LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특성을 가지기 때문입니다.
 
-    원인1 : CV에 맞춰진 Quantization Schema: LLM의 Activation 값에는 드물게 매우 큰 값(outlier)이 나타나는 경향이 있습니다. 이 때문에 전체 텐서에 단 하나의 스케일 값을 적용하는 Per-Tensor Quantization을 사용하면 대부분의 값이 표현 범위를 제대로 활용하지 못해 정보 손실이 극심해집니다. AIMET의 경우 activation은 per-tensor, weight는 per-channel, per-tensor만 지원해서 많은 SOTA 논문에서 활용하는 per-group quantization, per-token qunatization이 불가능합니다.
+원인1 : CV에 맞춰진 Quantization Schema: LLM의 Activation 값에는 드물게 매우 큰 값(outlier)이 나타나는 경향이 있습니다. 이 때문에 전체 텐서에 단 하나의 스케일 값을 적용하는 Per-Tensor Quantization을 사용하면 대부분의 값이 표현 범위를 제대로 활용하지 못해 정보 손실이 극심해집니다. AIMET의 경우 activation은 per-tensor, weight는 per-channel, per-tensor만 지원해서 많은 SOTA 논문에서 활용하는 per-group quantization, per-token qunatization이 불가능합니다.
 
-    원인 2:특정 연산자의 높은 민감도: Normalization, Softmax, Non-linear function, Attention의 BMM과 같은 특정 연산자들은 Quantization 오차에 매우 민감하여, 정수로 변환 시 모델의 정확도가 크게 하락합니다.
+원인 2:특정 연산자의 높은 민감도: Normalization, Softmax, Non-linear function, Attention의 BMM과 같은 특정 연산자들은 Quantization 오차에 매우 민감하여, 정수로 변환 시 모델의 정확도가 크게 하락합니다.
 
 <img width="447" height="127" alt="image" src="https://github.com/user-attachments/assets/d6916c7c-f71f-46d6-812e-b7f24dc88208" />
-
-실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
+> *위의 표는 실제 여러 논문에서 Attention 연산을 실제로 integer을 통해 하는지 조사한 것입니다.
+> 
+실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16  연산하는 Mixed-Precision 전략을 사용합니다.
 
 
 
@@ -128,7 +129,7 @@ elif isinstance(module, QMatMul):
 
 따라서 mobilequant 에서는 non-linear operator는 quantization을 안 했습니다. 또한 논문에는 없었지만 코드를 보면 attention도 하지 않았습니다.
 
-위의 표는 실제 여러 논문에서 Attention 연산을 실제로 integer을 통해 하는지 조사한 것입니다.
+
 
 문제점 2: Static 그래프만 지원하는 NPU
 NPU는 추론 성능을 극대화하기 위해 계산 그래프를 미리 컴파일하여 고정된 형태로 사용합니다. 하지만 LLM의 추론 과정, 특히 KV Cache를 사용하는 생성 단계는 동적인 측면이 있습니다.
