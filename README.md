@@ -93,7 +93,7 @@ def qdense_compute(
 <img width="423" height="212" alt="image" src="https://github.com/user-attachments/assets/f0c067e2-8fed-4dd4-b36f-8f7e59c4cb09" />
 
 
-> *가장 최신 스냅드래곤 NPU는 float16 연산을 부분적으로 지원하는 것으로 보입니다.
+> *가장 최신 스냅드래곤 NPU는 float16 연산을 부분적으로 지원하는 것으로 보입니다. (하지만 느릴것으로 추정됨.)
 
 ## LLM에 AIMET 방식의 경량화 적용이 어려운 이유와 해결법
 하지만 이 방식을 LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특성을 가지기 때문입니다.
