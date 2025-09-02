@@ -1,5 +1,3 @@
-
-
 # NPU에서 LLM을 효과적으로 활용하기 위한 최적화 방안
 
 ## NPU에서 LLM을 구동시키기 위해 무엇이 필요할까?
@@ -21,7 +19,99 @@
 > *위 표에서는 mobile NPU가 fp16과 같은 연산에서 얼마나 비효율적인지 보여줍니다.*
 
 ### CV 모델의 성공 사례: Integer-only Arithmetic
-컴퓨터 비전(CV) 모델에서는 이미 활발한 연구를 통해 모든 연산을 정수로 처리하는 기법이 자리 잡았습니다. 핵심은 Quantization을 통해 연산을 정수로 대체하고, scale 값을 곱하는 실수 연산마저 bit shift와 정수 곱셈으로 구현하여 **모든 실수 연용
+컴퓨터 비전(CV) 모델에서는 이미 활발한 연구를 통해 모든 연산을 정수로 처리하는 기법이 자리 잡았습니다. 핵심은 Quantization을 통해 연산을 정수로 대체하고, scale 값을 곱하는 실수 연산마저 bit shift와 정수 곱셈으로 구현하여 **모든 실수 연산을 제거**하는 것입니다(Fixed-Point Arithmetic). 퀄컴의 AIMET과 같은 툴은 이러한 Quantization을 효과적으로 지원합니다.
+
+> [Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference](https://arxiv.org/abs/1712.05877)
+
+### 실제 QNN 커널 코드
+```python
+def qdense_compute(
+    tensor_a,
+    tensor_b,
+    zero_a,
+    scale_a,
+    zero_b,
+    scale_b,
+    zero_out=None,
+    scale_out=None,
+    bias=None,
+    q_dtype=None,
+):
+    """Hexagon's implementation of a sliced dense operator in Topi.
+    Uses matmul.
+    """
+    if bias is not None:
+        assert len(bias.shape) == 1
+    if q_dtype is None:
+        q_dtype = tensor_a.dtype
+
+    batch, in_dim = tensor_a.shape
+    out_dim, red_dim = tensor_b.shape
+
+    assert int(in_dim) == int(red_dim)
+
+    k = te.reduce_axis((0, in_dim), name="k")
+    compute_lambda = lambda n, m: te.sum(
+        scale_a
+        * (tensor_a[n, k].astype("float32") - zero_a)
+        * scale_b
+        * (tensor_b[k, m].astype("float32") - zero_b),
+        axis=k,
+    )
+    compute_name = "qmatmul_sliced"
+
+    out = te.compute(
+        (batch, out_dim),
+        compute_lambda,
+        name=compute_name,
+        attrs={"layout_free_placeholders": [tensor_b]},
+    )
+
+    if bias is not None:
+        out = te.compute(
+            (batch, out_dim),
+            lambda i, j: out[i, j] + bias[j],
+            tag=tag.BROADCAST,
+            name="bias",
+        )
+
+    if scale_out is not None:
+        out = te.compute(
+            (batch, out_dim),
+            lambda *i: (out[i] / scale_out + zero_out).astype(q_dtype),
+            name="requantize",
+        )
+
+    return out
+```
+
+> 이 코드를 보면 현재 최신 버전 QNN은 scale 자체는 float 연산을 하는 것으로 보입니다.
+
+
+<img width="423" height="212" alt="image" src="https://github.com/user-attachments/assets/f0c067e2-8fed-4dd4-b36f-8f7e59c4cb09" />
+
+
+> *가장 최신 스냅드래곤 NPU는 float16 연산을 부분적으로 지원하는 것으로 보입니다. (하지만 느릴것으로 추정됨.)
+
+## AIMET을 통한 모든 연산자의 quantization의 문제점. 
+
+LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특성을 가지기 때문입니다.
+
+원인 1: CV에 맞춰진 Quantization Schema: LLM의 Activation 값에는 드물게 매우 큰 값(outlier)이 나타나는 경향이 있습니다. 이 때문에 전체 텐서에 단 하나의 스케일 값을 적용하는 Per-Tensor Quantization을 사용하면 대부분의 값이 표현 범위를 제대로 활용하지 못해 정보 손실이 극심해집니다. AIMET의 경우 activation은 per-tensor, weight는 per-channel, per-tensor만 지원해서 많은 SOTA 논문에서 활용하는 per-group quantization, per-token qunatization이 불가능합니다.
+
+원인 2: 특정 연산자의 높은 민감도: Normalization, Softmax, Non-linear function, Attention의 BMM과 같은 특정 연산자들은 Quantization 오차에 매우 민감하여, 정수로 변환 시 모델의 정확도가 크게 하락합니다.
+
+## 해결법
+
+<img width="441" height="130" alt="image" src="https://github.com/user-attachments/assets/55d94993-f3e5-4532-8128-3159b60c3bda" />
+
+> *실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
+
+<img width="1348" height="377" alt="image" src="https://github.com/user-attachments/assets/98109af5-7c20-4bc3-84f7-c383dc9e92ac" />
+
+> * 제가 실제로 MobileQuant 저자에게서 받은 내용입니다. 옛날 NPU라면 CPU와 GPU을 활용하라고 조언해주셨고, error가 심한 layer는 fp16을 활용하는 방식을 활용했다고 합니다. 
+
+mobilequant 코드에서는 FP16 사용
 ``` python
 elif isinstance(module, QMatMul):
     if 'qk_bmm' in name and args.use_16bit_softmax_input:
