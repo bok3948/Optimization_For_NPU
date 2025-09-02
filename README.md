@@ -26,9 +26,7 @@ Markdown
 > [Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference](https://arxiv.org/abs/1712.05877)
 
 <details>
-    
 <summary><b>QNN Quantization Dense Layer Kernel Code (접기/펼치기)</b></summary>
-
 ```python
 def qdense_compute(
     tensor_a,
