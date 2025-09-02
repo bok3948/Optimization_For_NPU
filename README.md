@@ -16,6 +16,7 @@ Markdown
 >
 > *Qualcomm AI Engine Direct SDK는 HTP(NPU)를 활용하려면 Quantization이 필수적이라고 명시합니다.*
 
+><img width="759" height="341" alt="image" src="https://github.com/user-attachments/assets/8d6c7ab0-f202-46dc-a327-c29c920e99c6" />
 > *위 표에서는 mobile NPU가 fp16과 같은 연산에서 얼마나 비효율적인지 보여줍니다.*
 
 ### CV 모델의 성공 사례: Integer-only Arithmetic
