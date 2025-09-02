@@ -27,7 +27,9 @@ Markdown
 
 <details>
 <summary><b>QNN Quantization Dense Layer Kernel Code (접기/펼치기)</b></summary>
+    
 ```python
+
 def qdense_compute(
     tensor_a,
     tensor_b,
