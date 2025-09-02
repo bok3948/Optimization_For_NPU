@@ -85,6 +85,7 @@ def qdense_compute(
         )
 
     return out
+```
 
 이 코드를 보면 현재 최신 버전 QNN은 scale 자체는 float 연산을 하는 것으로 보입니다.
 
