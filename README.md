@@ -113,24 +113,26 @@ LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특
 
 > * 제가 실제로 MobileQuant 저자에게서 받은 내용입니다. 옛날 NPU라면 CPU와 GPU을 활용하라고 조언해주셨고, error가 심한 layer는 fp16을 활용하는 방식을 활용했다고 합니다. 
 
-# mobilequant 코드에서는 FP16 사용
+mobilequant 코드에서는 FP16 사용
+``` python
 elif isinstance(module, QMatMul):
     if 'qk_bmm' in name and args.use_16bit_softmax_input:
         model._modules[name].output_quantizer.qcfg.bitwidth = 16
     if 'pv_bmm' in name and args.use_16bit_softmax_output:
         model._modules[name].input_quantizer.qcfg.bitwidth = 16
+```
 
 또한, non-linear operator들은 exponential 특징 때문에 FP16으로 처리했습니다. 작은 입력 변화에도 출력값이 크게 변하는 경우, linear quantization은 심각한 오차를 유발할 수 있습니다. 예를 들어 0과 0.1에 대한 non-linear 함수 출력이 각각 0과 100일 때, 이를 양자화하면 모두 0으로 출력될 수 있습니다.
 
 따라서 MobileQuant에서는 non-linear operator와 attention 연산을 양자화 대상에서 제외했습니다.
 
 
-
+## 문제점 2: NPU의 static graph 문제
 NPU는 추론 성능을 극대화하기 위해 계산 그래프를 미리 컴파일하여 고정된 형태로 사용합니다. 하지만 LLM의 추론 과정, 특히 KV Cache를 사용하는 생성 단계는 동적인 측면이 있습니다.
 
 Prefill 단계에서는 많은 토큰이 한 번에 입력되고, decode 단계에서는 하나의 토큰만 입력되는 등 입력 크기가 계속 변하는 것이 문제입니다. MobileQuant 저자는 이 문제를 Prefill과 Decode를 위한 두 개의 분리된 그래프를 생성하는 방식으로 해결했습니다.
 
-##문제점 3: ONNX 중심의 플랫폼과 편집의 어려움
+## 문제점 3: ONNX 그래프 편집의 어려움.
 다수의 NPU 제조사들은 오랫동안 표준으로 사용되어 온 ONNX를 핵심 입력 플랫폼으로 지원해왔습니다. 이는 하드웨어 제조사들이 ONNX에 맞춰 드라이버와 컴파일러를 최적화해 온 깊은 레거시를 가지고 있음을 의미합니다.
 
 하지만 ONNX는 PyTorch와 달리 개발자가 그래프를 직접 제어하거나 편집하기 어렵다는 단점이 있습니다. 이 문제를 해결하기 위한 접근법은 다음과 같습니다.
