@@ -25,7 +25,7 @@ Markdown
 
 > [Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference](https://arxiv.org/abs/1712.05877)
 
-### 실제 QNN 커널 코드드
+### 실제 QNN 커널 코드
 ```python
 def qdense_compute(
     tensor_a,
