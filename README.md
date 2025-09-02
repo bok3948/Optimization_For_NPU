@@ -52,7 +52,60 @@ def qdense_compute(
 
     assert int(in_dim) == int(red_dim)
 
-    k = te.reduce_제
+    k = te.reduce_axis((0, in_dim), name="k")
+    compute_lambda = lambda n, m: te.sum(
+        scale_a
+        * (tensor_a[n, k].astype("float32") - zero_a)
+        * scale_b
+        * (tensor_b[k, m].astype("float32") - zero_b),
+        axis=k,
+    )
+    compute_name = "qmatmul_sliced"
+
+    out = te.compute(
+        (batch, out_dim),
+        compute_lambda,
+        name=compute_name,
+        attrs={"layout_free_placeholders": [tensor_b]},
+    )
+
+    if bias is not None:
+        out = te.compute(
+            (batch, out_dim),
+            lambda i, j: out[i, j] + bias[j],
+            tag=tag.BROADCAST,
+            name="bias",
+        )
+
+    if scale_out is not None:
+        out = te.compute(
+            (batch, out_dim),
+            lambda *i: (out[i] / scale_out + zero_out).astype(q_dtype),
+            name="requantize",
+        )
+
+    return out
+'''
+이 코드를 보면 현재 최신 버전 QNN은 scale 자체는 float 연산을 하는 것으로 보입니다.
+
+<img width="427" height="216" alt="image" src="https://www.google.com/search?q=https://github.com/user-attachments/assets/2a83939e-1f44-46b4-b4c4-4bfe010f231c" />
+
+> *가장 최신 스냅드래곤 NPU는 float16 연산을 부분적으로 지원하는 것으로 보입니다.
+
+## LLM에 AIMET 방식의 경량화 적용이 어려운 이유와 해결법
+하지만 이 방식을 LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특성을 가지기 때문입니다.
+
+CV에 맞춰진 Quantization Schema: LLM의 Activation 값에는 드물게 매우 큰 값(outlier)이 나타나는 경향이 있습니다. 이 때문에 전체 텐서에 단 하나의 스케일 값을 적용하는 Per-Tensor Quantization을 사용하면 대부분의 값이 표현 범위를 제대로 활용하지 못해 정보 손실이 극심해집니다. AIMET의 경우 activation은 per-tensor, weight는 per-channel, per-tensor만 지원해서 많은 SOTA 논문에서 활용하는 per-group quantization, per-token qunatization이 불가능합니다.
+
+특정 연산자의 높은 민감도: Normalization, Softmax, Non-linear function, Attention의 BMM과 같은 특정 연산자들은 Quantization 오차에 매우 민감하여, 정수로 변환 시 모델의 정확도가 크게 하락합니다.
+
+<img width="447" height="127" alt="image" src="https://www.google.com/search?q=https://github.com/user-attachments/assets/d6916c7c-f71f-46d6-812e-b7f24dc88208" />
+
+실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
+
+
+
+
 NPU는 추론 성능을 극대화하기 위해 계산 그래프를 미리 컴파일하여 고정된 형태로 사용합니다. 하지만 LLM의 추론 과정, 특히 KV Cache를 사용하는 생성 단계는 동적인 측면이 있습니다.
 
 Prefill 단계에서는 많은 토큰이 한 번에 입력되고, decode 단계에서는 하나의 토큰만 입력되는 등 입력 크기가 계속 변하는 것이 문제입니다. MobileQuant 저자는 이 문제를 Prefill과 Decode를 위한 두 개의 분리된 그래프를 생성하는 방식으로 해결했습니다.
