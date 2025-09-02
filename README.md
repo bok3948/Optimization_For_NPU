@@ -89,9 +89,9 @@ def qdense_compute(
 
 > 이 코드를 보면 현재 최신 버전 QNN은 scale 자체는 float 연산을 하는 것으로 보입니다.
 
-<br>
 
-<img width="427" height="216" alt="image" src="https://www.google.com/search?q=https://github.com/user-attachments/assets/2a83939e-1f44-46b4-b4c4-4bfe010f231c" />
+<img width="423" height="212" alt="image" src="https://github.com/user-attachments/assets/f0c067e2-8fed-4dd4-b36f-8f7e59c4cb09" />
+
 
 > *가장 최신 스냅드래곤 NPU는 float16 연산을 부분적으로 지원하는 것으로 보입니다.
 
