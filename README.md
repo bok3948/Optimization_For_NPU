@@ -106,6 +106,7 @@ def qdense_compute(
 원인 2:특정 연산자의 높은 민감도: Normalization, Softmax, Non-linear function, Attention의 BMM과 같은 특정 연산자들은 Quantization 오차에 매우 민감하여, 정수로 변환 시 모델의 정확도가 크게 하락합니다.
 
 <img width="447" height="127" alt="image" src="https://github.com/user-attachments/assets/d6916c7c-f71f-46d6-812e-b7f24dc88208" />
+
 > *위의 표는 실제 여러 논문에서 Attention 연산을 실제로 integer을 통해 하는지 조사한 것입니다.
 > 
 실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16  연산하는 Mixed-Precision 전략을 사용합니다.
