@@ -105,7 +105,7 @@ LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특
 
 ## 해결법
 
-<img width="447" height="127" alt="image" src="https://www.google.com/search?q=https://github.com/user-attachments/assets/d6916c7c-f71f-46d6-812e-b7f24dc88208" />
+<img width="441" height="130" alt="image" src="https://github.com/user-attachments/assets/55d94993-f3e5-4532-8128-3159b60c3bda" />
 
 > *실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
 
