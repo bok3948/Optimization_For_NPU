@@ -111,15 +111,18 @@ CV에 맞춰진 Quantization Schema: LLM의 Activation 값에는 드물게 매�
 
 Python
 
-# mobilequant 코드에서는 FP16 사용
+mobilequant 코드에서는 FP16 사용
+```python
 elif isinstance(module, QMatMul):
     if 'qk_bmm' in name and args.use_16bit_softmax_input:
         model._modules[name].output_quantizer.qcfg.bitwidth = 16
     if 'pv_bmm' in name and args.use_16bit_softmax_output:
         model._modules[name].input_quantizer.qcfg.bitwidth = 16
+```
+
 <img width="1361" height="391" alt="image" src="https://github.com/user-attachments/assets/85d6ad3c-0b33-471c-a729-2b8456331005" />
 
-위의 그림은 제가 직접 관련 연구하시는 분께 문의를 드려서 얻은 조언입니다. Older NPU에는 GPU/CPU를 활용해서 성능 저하를 막아야 한다고 하셨습니다. 하지만 최신 NPU는 fp16을 지원을 한다고 이야기 하셨습니다. 어쩌면 아직 Qualcomm AI Direct Engine Docs가 update가 안 된 걸 수도 있을 것 같습니다.
+>* 위의 그림은 제가 직접 관련 연구하시는 분께 문의를 드려서 얻은 조언입니다. Older NPU에는 GPU/CPU를 활용해서 성능 저하를 막아야 한다고 하셨습니다. 하지만 최신 NPU는 fp16을 지원을 한다고 이야기 하셨습니다. 어쩌면 아직 Qualcomm AI Direct Engine Docs가 update가 안 된 걸 수도 있을 것 같습니다.
 
 또한 non-linear operator들은 fp16으로 했는데 이는 exponential 특징 때문으로 보입니다. 작은 변화에도 크게 값이 변할 경우에는 linear quantization으로는 크게 오류가 생깁니다. 예를 들어 0, 0.1의 non-linear 함수의 출력이 0, 100이라고 하면 quantization을 해버리면 0, 0이 출력됩니다. 심각한 quantization error가 발생합니다.
 
