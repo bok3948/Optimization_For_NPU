@@ -113,7 +113,16 @@ LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특
 
 > * 제가 실제로 MobileQuant 저자에게서 받은 내용입니다. 옛날 NPU라면 CPU와 GPU을 활용하라고 조언해주셨고, error가 심한 layer는 fp16을 활용하는 방식을 활용했다고 합니다. 
 
+# mobilequant 코드에서는 FP16 사용
+elif isinstance(module, QMatMul):
+    if 'qk_bmm' in name and args.use_16bit_softmax_input:
+        model._modules[name].output_quantizer.qcfg.bitwidth = 16
+    if 'pv_bmm' in name and args.use_16bit_softmax_output:
+        model._modules[name].input_quantizer.qcfg.bitwidth = 16
 
+또한, non-linear operator들은 exponential 특징 때문에 FP16으로 처리했습니다. 작은 입력 변화에도 출력값이 크게 변하는 경우, linear quantization은 심각한 오차를 유발할 수 있습니다. 예를 들어 0과 0.1에 대한 non-linear 함수 출력이 각각 0과 100일 때, 이를 양자화하면 모두 0으로 출력될 수 있습니다.
+
+따라서 MobileQuant에서는 non-linear operator와 attention 연산을 양자화 대상에서 제외했습니다.
 
 
 
