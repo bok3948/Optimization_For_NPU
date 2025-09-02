@@ -98,7 +98,7 @@ def qdense_compute(
 
 현재 가장 최신의 스냅드래곤 NPU는 float16 연산을 부분적으로 지원하는 것으로 보입니다.
 
-LLM 적용의 어려움
+###LLM 적용의 어려움
 하지만 이 방식을 LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특성을 가지기 때문입니다.
 
 CV에 맞춰진 Quantization Schema: LLM의 Activation 값에는 드물게 매우 큰 값(outlier)이 나타나는 경향이 있습니다. 이 때문에 전체 텐서에 단 하나의 스케일 값을 적용하는 Per-Tensor Quantization을 사용하면 대부분의 값이 표현 범위를 제대로 활용하지 못해 정보 손실이 극심해집니다. AIMET의 경우 activation은 per-tensor, weight는 per-channel, per-tensor만 지원해서 많은 SOTA 논문에서 활용하는 per-group quantization, per-token qunatization이 불가능합니다.
