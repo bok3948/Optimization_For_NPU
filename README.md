@@ -95,7 +95,7 @@ def qdense_compute(
 
 > *가장 최신 스냅드래곤 NPU는 float16 연산을 부분적으로 지원하는 것으로 보입니다. (하지만 느릴것으로 추정됨.)
 
-## AIMET의 CV 특화에서 생기는 문제점. 
+## AIMET을 통한 모든 연산자의 quantization의 문제점. 
 
 LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특성을 가지기 때문입니다.
 
@@ -103,9 +103,13 @@ LLM에 그대로 적용하기는 어렵습니다. LLM은 CV 모델과 다른 특
 
 원인 2: 특정 연산자의 높은 민감도: Normalization, Softmax, Non-linear function, Attention의 BMM과 같은 특정 연산자들은 Quantization 오차에 매우 민감하여, 정수로 변환 시 모델의 정확도가 크게 하락합니다.
 
+## 해결법
+
 <img width="447" height="127" alt="image" src="https://www.google.com/search?q=https://github.com/user-attachments/assets/d6916c7c-f71f-46d6-812e-b7f24dc88208" />
 
-실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
+> *실제로 다수의 연구에서는 BMM과 같은 민감한 연산자는 NPU에서 처리하지 않고, GPU/CPU를 활용해 FP16 또는 INT16으로 연산하는 Mixed-Precision 전략을 사용합니다.
+
+<img width="1361" height="391" alt="image" src="https://www.google.com/search?q=https://github.com/user-attachments/assets/85d6ad3c-0b33-471c-a729-2b8456331005" />
 
 
 
