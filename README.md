@@ -53,9 +53,9 @@ def qdense_compute(
     k = te.reduce_axis((0, in_dim), name="k")
     compute_lambda = lambda n, m: te.sum(
         scale_a
-        * (tensor_a[n, k].astype("float32") - zero_a)
+        * (tensor_a[n, k] - zero_a)
         * scale_b
-        * (tensor_b[k, m].astype("float32") - zero_b),
+        * (tensor_b[k, m] - zero_b),
         axis=k,
     )
     compute_name = "qmatmul_sliced"
