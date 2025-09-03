@@ -148,6 +148,269 @@ PyTorch 모델을 ONNX로 변환할 필요가 없음
 
 그래프 편집 및 Fake Quantization 적용이 상대적으로 쉬움
 
+대안: ONNX 편집 (AMD)
+
+``` python
+class VitisDPUQDQQuantizer(QDQQuantizer):
+    def __init__(
+        self,
+        model,
+        per_channel,
+        reduce_range,
+        mode,
+        static,
+        weight_qType,
+        input_qType,
+        tensors_range,
+        nodes_to_quantize,
+        nodes_to_exclude,
+        op_types_to_quantize,
+        calibrate_method,
+        need_layer_fusing=False,
+        extra_options=None,
+    ):
+        QDQQuantizer.__init__(
+            self,
+            model,
+            per_channel,
+            reduce_range,
+            mode,
+            static,
+            weight_qType,
+            input_qType,
+            tensors_range,
+            nodes_to_quantize,
+            nodes_to_exclude,
+            op_types_to_quantize,
+            extra_options,
+        )
+        self.tensors_to_quantize = {}
+        self.calibrate_method = calibrate_method
+        self.need_layer_fusing = need_layer_fusing
+
+        if per_channel:
+            logging.error("per_channel is not supported in PowerOfTwoMethod calibrate_method.")
+
+        # In PowerOfTwoMethod calibrate_method, QDQ should always appear as a pair.
+        # Therefore, we need to add qdq pair to weight.
+        if "AddQDQPairToWeight" in self.extra_options and not self.extra_options["AddQDQPairToWeight"]:
+            logging.error("AddQDQPairToWeight should be True in PowerOfTwoMethod calibrate_method.")
+        self.add_qdq_pair_to_weight = True
+
+        # In PowerOfTwoMethod calibrate_method, QDQ should always set WeightSymmetric as True.
+        if "WeightSymmetric" in self.extra_options and not self.extra_options["WeightSymmetric"]:
+            logging.error("WeightSymmetric should be True in PowerOfTwoMethod calibrate_method.")
+        self.is_weight_symmetric = True
+
+        # In PowerOfTwoMethod calibrate_method, QDQ should always always set ActivationSymmetric as True.
+        if "ActivationSymmetric" in self.extra_options and not self.extra_options["ActivationSymmetric"]:
+            logging.error("ActivationSymmetric should be True in PowerOfTwoMethod calibrate_method.")
+        self.is_activation_symmetric = True
+
+    def vitis_quantize_initializer(self, weight, bit_width=8, keep_float_weight=False):
+
+        # Find if this input is already quantized
+        if weight.name in self.quantized_value_map:
+            quantized_value = self.quantized_value_map[weight.name]
+            return (
+                quantized_value.q_name,
+                quantized_value.zp_name,
+                quantized_value.scale_name,
+            )
+
+        q_weight_name = weight.name + "_quantized"
+        zp_name = weight.name + "_zero_point"
+        scale_name = weight.name + "_scale"
+
+        # Update packed weight, zero point, and scale initializers
+        weight_data = tensor_proto_to_array(weight)
+        _, _, zero_point, scale, q_weight_data = vitis_quantize_data(
+            weight_data.flatten(), bit_width, method=self.calibrate_method
+        )
+        scale_initializer = onnx.helper.make_tensor(scale_name, onnx_proto.TensorProto.FLOAT, [], [scale])
+        zero_initializer = onnx.helper.make_tensor(zp_name, onnx_proto.TensorProto.INT8, [], [zero_point])
+        self.model.initializer().extend([scale_initializer, zero_initializer])
+
+        # Log entry for this quantized weight
+        quantized_value = QuantizedValue(
+            weight.name,
+            q_weight_name,
+            scale_name,
+            zp_name,
+            QuantizedValueType.Initializer,
+            None,
+        )
+        self.quantized_value_map[weight.name] = quantized_value
+
+        return q_weight_name, zp_name, scale_name
+
+    def quantize_model(self):
+
+        self.tensor_info = {}
+        model = self.model.model
+        annotate_output_name_list = get_annotate_output_name(model)
+        relu_to_conv_output = get_relu_name(model, annotate_output_name_list)
+
+        for node in self.model.nodes():
+            if self.should_quantize_node(node):
+                op_quantizer = CreateQDQQuantizer(self, node)
+                op_quantizer.quantize()
+
+                if self.dedicated_qdq_pair:
+                    for tensor_name in node.input:
+                        if tensor_name not in self.tensor_to_its_receiving_nodes:
+                            self.tensor_to_its_receiving_nodes[tensor_name] = []
+                        self.tensor_to_its_receiving_nodes[tensor_name].append(node)
+
+        self._quantize_normal_tensors()
+
+        self._quantize_sharing_param_tensors()
+        dq_nodes_to_remove, q_nodes_to_remove = get_qdq_to_remove(
+            model, relu_to_conv_output)
+        convert_relu_input_to_annotate_output(model, relu_to_conv_output)
+        if self.need_layer_fusing:
+            model = remove_nodes(model, dq_nodes_to_remove)
+            model = remove_nodes(model, q_nodes_to_remove)
+        self._quantize_refine()
+        self.remove_nodes()
+        if not self.add_qdq_pair_to_weight:
+            self.model.clean_initializers()
+
+        model.producer_name = __producer__
+        model.producer_version = __version__
+
+        return model
+
+    def _add_qdq_pair_for_initializer(self, weight_proto, tensor_type, axis=None):
+        weight_name = weight_proto.name
+        q_weight_name, zp_name, scale_name = self.vitis_quantize_initializer(
+            weight_proto, self.weight_qType, keep_float_weight=True
+        )
+
+        weight_dequant_output = add_dequant_output_suffix(weight_name)
+        self.model.replace_input_of_all_nodes(weight_name, weight_dequant_output)
+        if self.add_qdq_pair_to_weight:
+            weight_quant_output = add_quant_output_suffix(weight_name)
+
+            self._create_qdq_nodes(
+                weight_name,
+                weight_quant_output,
+                add_quant_suffix(weight_name),
+                weight_quant_output,
+                weight_dequant_output,
+                add_dequant_suffix(weight_name),
+                scale_name,
+                zp_name,
+                axis,
+            )
+        else:
+            dequant_node = onnx.helper.make_node(
+                DEQUANT_OP_NAME,
+                [q_weight_name, scale_name, zp_name],
+                [weight_dequant_output],
+                add_dequant_suffix(weight_name),
+                axis=axis,
+            )
+
+            self.model.add_node(dequant_node)
+
+    def quantize_bias_tensor(self, bias_name, input_name, weight_name, beta=1.0):
+        weight = find_by_name(bias_name, self.model.initializer())
+        if weight is not None:
+            if weight.data_type == onnx_proto.TensorProto.FLOAT:
+                # Use int8 quantization for bias as well as weights.
+                self.tensors_to_quantize[bias_name] = QDQTensorQuantInfo()
+        else:
+            logging.warning("Expected {} to be a weight".format(bias_name))
+
+    def _quantize_refine(self):
+        self.model = adjust_quantize_info(
+            self.model,
+            adjust_vitis_sigmoid=True,
+            adjust_shift_cut=True,
+            adjust_shift_bias=True,
+            adjust_shift_read=True,
+            adjust_shift_write=True,
+            align_concat=True,
+            align_pool=True,
+        )
+
+class VitisAIQDQQuantizer(VitisAIONNXQuantizer):
+    def __init__(
+        self,
+        model,
+        per_channel,
+        reduce_range,
+        mode,
+        static,
+        weight_qType,
+        activation_qType,
+        tensors_range,
+        nodes_to_quantize,
+        nodes_to_exclude,
+        op_types_to_quantize,
+        extra_options=None,
+    ):
+        ONNXQuantizer.__init__(
+            self,
+            model,
+            per_channel,
+            reduce_range,
+            mode,
+            static,
+            weight_qType,
+            activation_qType,
+            tensors_range,
+            nodes_to_quantize,
+            nodes_to_exclude,
+            op_types_to_quantize,
+            extra_options,
+        )
+        self.tensors_to_quantize = {}
+        self.bias_to_quantize = []
+
+        self.nodes_to_remove = []
+
+        # Specific op types to exclude qdq quantization for their outputs.
+        # In TRT, it's not recommended to quantize outputs for weighted ops such as Conv, Matmul, Gemm
+        # because those ops may be followed by nodes that require high resolution inputs.
+        # Adding QDQ for those ops' output may end up with worse accuracy.
+        # So, we don't recommend to add QDQ to node's output under such condition.
+        self.op_types_to_exclude_output_quantization = (
+            []
+            if "OpTypesToExcludeOutputQuantization" not in extra_options
+            else extra_options["OpTypesToExcludeOutputQuantization"]
+        )
+
+        # We do quantization on Dequantizelinear's input to remove Quantizelinear for weight as an optimization.
+        # In some cases, for example QDQ BERT model for TensorRT, QDQ should always appear as a pair.
+        # Therefore, we need to disable this optimization and add qdq pair to weight.
+        self.add_qdq_pair_to_weight = (
+            False if "AddQDQPairToWeight" not in extra_options else extra_options["AddQDQPairToWeight"]
+        )
+
+        # The default behavior is that multiple nodes can share a QDQ pair as their inputs.
+        # In TRT, QDQ pair can’t be shared between nodes, so it will create dedicated QDQ pairs for each node.
+        self.dedicated_qdq_pair = (
+            False if "DedicatedQDQPair" not in extra_options else extra_options["DedicatedQDQPair"]
+        )
+        if self.dedicated_qdq_pair:
+            self.tensor_to_its_receiving_nodes = {}
+
+        # Let user set channel axis for specific op type and it's effective only when per channel quantization is supported and per_channel is True.
+        self.qdq_op_type_per_channel_support_to_axis = (
+            {}
+            if "QDQOpTypePerChannelSupportToAxis" not in extra_options
+            else extra_options["QDQOpTypePerChannelSupportToAxis"]
+        )
+```
+> * 이 코드는 실제로 AMD에서 AMD에서 NPU에 알맞은 형태로 ONNX 모델을 Quantization하는 방식이다. 
+
+
+
+
+
+
 ## 문제점 4: 제한적 연산자 지원
 NPU는 모든 종류의 연산자를 하드웨어로 지원하지 않습니다. 이는 모든 엣지 디바이스가 가진 공통적인 문제입니다.
 
